@@ -1,22 +1,31 @@
 import React, { Component } from 'react';
 import propTypes from 'prop-types';
 import ReactDOM from 'react-dom';
-import Data from './Data.js';
+import Data from './data';
 import calculate from './calculate.js';
-import LayoutBottom from './layoutBottom.js'
-import LayoutMiddle from "./layoutMiddle.js";
-import LayoutTop from './layoutTop.js';
+import ChipGroup from './chipGroup.js'
+import ChipTable from "./chipTable.js";
+import DicePanel from './dicePanel.js';
 import $ from 'jquery';
+
+// import {bindActionCreators} from 'redux';
+// import {connect} from 'react-redux';
+//
+// import Actions, {PickerActions} from 'matrix-web-components-2.0';
+// console.log(Actions);
+
+// const {pickerActions, timerActions, orderActions} = PickerActions;
+
 var nowTime = new Date();
 var chipArr = new Array(Data.length); // 创建一个空数组，长度为投注种类长度 52 存放每个投注类型中的筹码数量
 for (var x = 0; x < chipArr.length; x++) {  //存放每个投注类型中的筹码数
   chipArr[x] = new Array();
 }
+var open = true;
 var chipRecordArr = new Array();           // 数据数组记录每次投注信息
 export default class GameLogic extends Component {
   constructor(props) {
     super(props);
-    this.bitTypeOnmousedown = this.bitTypeOnmousedown.bind(this);
     this.AddChipThere = this.AddChipThere.bind(this);
     this.showMoney = this.showMoney.bind(this);
     this.buttonClick = this.buttonClick.bind(this);
@@ -31,128 +40,141 @@ export default class GameLogic extends Component {
       dataCountAmount: '0.00',
       dataUserBalance: '1000.00',
       history: [],
+      activeChip: 1,
     }
+    this.ChipArr = [
+      1, 2, 5, 10, 20, 50, 100, 500
+    ];
   }
-
   //history {restArr:[],winIndex:[],index}
-  componentDidMount() {
-    var $chip_i = $('#bottom span.chip-group i');
-    $chip_i.click(function () {
-      $(this).addClass('chip-seleced').siblings().removeClass('chip-seleced');
-    });
-    //取消右键菜单
-    $('body').bind("contextmenu", function (e) {
-      return false;
-    });
+  /**
+   * [changeChip 传入chipGroup组件]
+   * @param  {[type]} chipVal [获取当前点击元素]
+   * @return {[type]}         [description]
+   */
 
-    this.bitTypeOnmousedown();
-    this.onMouseOverChip();
-    this.buttonClick();
+  changeChip(chipVal) {
+    this.setState({
+      activeChip: chipVal
+    });
   }
 
   /**
-   * [bitTypeOnmousedown 投注.撤注的操作]
-   * @return {[type]} [description]
+   * [bet 传入chipTable组件]
+   * @param  {[type]} value [betContainer对象]
+   * @return {[type]}       [description]
    */
-  bitTypeOnmousedown() {
-    var self = this;
-    var $bitType = $('.dice-table .dice-sheet .bet-container');
-    var $chipSelect = $('.chip-seleced');      //选中的筹码
-    var chipW = $chipSelect.width();
-    var chipH = $chipSelect.height();
-    $bitType.mousedown(function (event) {
-      //console.log(chipRecordArr);
-      // 此时this指向点击的投注；类型
-      var bitTypeSelf = $(this);
+  bet(e) {
+    if (open) {
+      var self = this;      //GameLogic
+      //  console.log(e);
       var $chipSelect = $('.chip-seleced');      //选中的筹码
-      var chipMoney = $chipSelect.attr('data-money');            //获取当前选中筹码的金额
-      var index = $(this).index();             //当前投注类型序号
-      var x = $(this).offset().left + $(this).width() / 2 - chipW / 2;  //筹码在投注类型中放置位置
-      var y = $(this).offset().top + $(this).height() / 2 - chipH / 2;
-      //左键投注 1	鼠标左键
-      if (event.which == 1) {
-        var json = {};
-        var chipLeft = $chipSelect.offset().left;  //当前选中筹码的位置
-        var chipTop = $chipSelect.offset().top;
-        var chipBackpo = $chipSelect.css('backgroundPosition');  //当前选中筹码的 backgroundPosition
-        var { dataCountAmount, dataUserBalance } = self.state;
-        var nowCountAmount = dataCountAmount * 1 + chipMoney * 1; //当前投注
-        if (new Date() - nowTime > 300) {
-          if (nowCountAmount > dataUserBalance * 1) {
-            alert('余额不足');
-          } else {
-            //可以设置最大投注金额
-            var chipAdd = document.createElement('i'); //创建可移动的筹码
-            chipAdd.className = 'chip chip-add';
-            //在当前选中的筹码位置上创建筹码用于移动动画
-            chipAdd.style.cssText = 'left:' + chipLeft + 'px; top:' + chipTop + 'px; background-position:' + chipBackpo + ';'; // 设置css为当前选中筹码的位置（屏幕下侧一排）
-            $('body').append(chipAdd); // 先创建一个筹码添加到body里面，然后动画飞到创建位置
-            $('body > i').animate({ 'left': `${x}px`, 'top': `${y}px` }, 200, 'linear', function () {
-              //当前的 this为 chip-add
-              $(this).remove(); //移动完成后删除当前的筹码
-              self.AddChipThere(bitTypeSelf, chipMoney, index, chipBackpo, chipW, chipH);
-              //bitTypeSelf : itemLump当前投注类型的对象
-              //chipMoney : 前选中筹码的金额
-              //index: 当前的投注块索引
-              //chipBackpo : 当前选中筹码的 backgroundPosition
-            });
-            json = {
-              'chipBackpo': chipBackpo,     //当前选中筹码的 backgroundPosition
-              'chipMoney': chipMoney,   //获取当前选中筹码的金额
-              'postLeft': x,            //筹码在投注类型中放置位置
-              'postTop': y,
-              'index': index,       //当前投注类型的索引值
-              'bitTypeSelf': bitTypeSelf,       //指针指向当前选中的投注块
+      var $betContainer = $(e.target.parentNode);              //当前对象
+      var classC = $betContainer.attr('class').toString();
+      console.log(e.target);
+      if (e.target && (e.target.matches('.bet-type') || e.target.matches('.chip-add'))) {
+        var $chipSelect = $('.chip-seleced');      //选中的筹码
+        var chipMoney = $chipSelect.attr('data-money');            //获取当前选中筹码的金额
+        var chipW = $chipSelect.width();
+        var chipH = $chipSelect.height();
+        var index = $betContainer.index();
+        var x = $betContainer.offset().left + $betContainer.width() / 2 - chipW / 2;  //筹码在投注类型中的位置
+        var y = $betContainer.offset().top + $betContainer.height() / 2 - chipH / 2;  //筹码在投注类型中的位置
+        //左键投注 1
+        if (e.button == 0) {
+          var json = {};
+          var chipLeft = $chipSelect.offset().left; //当前选中筹码的位置(下方)
+          var chipTop = $chipSelect.offset().top;
+          var chipBackpo = $chipSelect.css('backgroundPosition'); //当前选中筹码的 backgroundPosition
+          var { dataCountAmount, dataUserBalance } = self.state;
+          var nowCountAmount = dataCountAmount * 1 + chipMoney * 1; //当前投注
+          if (new Date() - nowTime > 300) {
+            if (nowCountAmount > dataUserBalance * 1) {
+              alert('余额不足，请充值');
+            } else {
+              //可以设置最大投注金额
+              var chipAdd = document.createElement('i'); //创建可移动的筹码
+              chipAdd.className = 'chip chip-add';
+              //在当前选中的筹码位置上创建筹码用于移动动画
+              chipAdd.style.cssText = 'left:' + chipLeft + 'px; top:' + chipTop + 'px; background-position:' + chipBackpo + ';'; // 设置css为当前选中筹码的位置（屏幕下侧一排）
+              $('body').append(chipAdd); // 先创建一个筹码添加到body里面，然后动画飞到创建位置
+              $('body > i').animate({ 'left': `${x}px`, 'top': `${y}px` }, 200, 'linear', function () {
+                //当前的 this为 chip-add
+                $(this).remove(); //移动完成后删除当前的筹码
+                self.AddChipThere($betContainer, chipMoney, index, chipBackpo, chipW, chipH);
+                //bitTypeSelf : itemLump当前投注类型的对象
+                //chipMoney : 前选中筹码的金额
+                //index: 当前的投注块索引
+                //chipBackpo : 当前选中筹码的 backgroundPosition
+              });
+              json = {
+                'chipBackpo': chipBackpo,     //当前选中筹码的 backgroundPosition
+                'chipMoney': chipMoney,   //获取当前选中筹码的金额
+                'postLeft': x,            //筹码在投注类型中放置位置
+                'postTop': y,
+                'index': index,       //当前投注类型的索引值
+                'bitTypeSelf': $betContainer,       //指针指向当前选中的投注块
+              }
+              chipArr[index].length++; //当前选中类型中的筹码数加1
+              chipRecordArr.push(json);
+              console.log(chipRecordArr);
+              self.showMoney($betContainer, chipMoney);
+              //取消btn禁用
+              $('.ui-button').removeClass('btn-disabled');
+              nowTime = new Date();
             }
-            chipArr[index].length++; //当前选中类型中的筹码数加1
-            chipRecordArr.push(json);
-            self.showMoney(bitTypeSelf, chipMoney);
-            //取消btn禁用
-            $('.ui-button').removeClass('btn-disabled');
+          }
+        } else if (e.button == 2) {
+          if (new Date() - nowTime > 300) {
+            if (chipArr[index].length && chipRecordArr.length) { //如果当前区块內存在筹码，且存在投注记录
+              // 获取当前撤销筹码的金额
+              var chipData = $betContainer.find('i').eq(chipArr[index].length - 1).attr('data-money');
+              var targetChip = $('#bottom .chip-group i[data-money="' + chipData + '"]'); //获取下面筹码列中为当前筹码金额的对象
+              if (targetChip) {
+                var targetL = targetChip.offset().left;     //获取下侧筹码的位置
+                var targetT = targetChip.offset().top;
+                var targetBackpo = targetChip.css('backgroundPosition');  //获取筹码的图片位置
+                $betContainer.find('i').eq(chipArr[index].length - 1).remove(); //移除当前最上面的筹码
+                var remChip = document.createElement('i');
+                remChip.className = 'chip chip-add';
+                remChip.style.cssText = 'left:' + x + 'px;top:' + y + 'px;background-position:' + targetBackpo + ';';
+                $('body').append(remChip);
+                $('body > i').animate({ 'left': targetL + 'px', 'top': targetT + 'px' }, 200, 'linear', function () {
+                  $(this).remove();
+                });
+                //判断当前选区存在筹码，筹码个数减1，
+                chipArr[index].length > 0 ? chipArr[index].length-- : chipArr[index].length = 0;
+                for (var i = chipRecordArr.length - 1; i >= 0; i--) {  //从后往前找到 当前区域中最后一个投注值
+                  if (index == chipRecordArr[i].index) {
+                    chipRecordArr.splice(i, 1);   //当投注区域的index 匹配到 投注记录最新投注的index，则删除这条记录
+                    break;   //不需要在执行下去(每次撤销只删除一个)
+                  }
+                }
+                if (chipRecordArr.length == 0) {
+                  $('.ui-button').addClass('btn-disabled');
+                }
+                self.showMoney($betContainer, -chipMoney);
+              }
+            }
             nowTime = new Date();
           }
         }
-        console.log('chipMoney');
-        console.log(chipMoney);
-      } else if (event.which == 3) {//右键撤单
-        if (new Date() - nowTime > 300) {
-          if (chipArr[index].length && chipRecordArr.length) { //如果当前区块內存在筹码，且存在投注记录
-            // 获取当前撤销筹码的金额
-            var chipData = $(this).find('i').eq(chipArr[index].length - 1).attr('data-money');
-            var targetChip = $('#bottom .chip-group i[data-money="' + chipData + '"]'); //获取下面筹码列中为当前筹码金额的对象
-            if (targetChip) {
-              var targetL = targetChip.offset().left;     //获取下侧筹码的位置
-              var targetT = targetChip.offset().top;
-              var targetBackpo = targetChip.css('backgroundPosition');  //获取筹码的图片位置
-              $(this).find('i').eq(chipArr[index].length - 1).remove(); //移除当前最上面的筹码
-              var remChip = document.createElement('i');
-              remChip.className = 'chip chip-add';
-              remChip.style.cssText = 'left:' + x + 'px;top:' + y + 'px;background-position:' + targetBackpo + ';';
-              $('body').append(remChip);
-              $('body > i').animate({ 'left': targetL + 'px', 'top': targetT + 'px' }, 200, 'linear', function () {
-                $(this).remove();
-              });
-              //判断当前选区存在筹码，筹码个数减1，
-              chipArr[index].length > 0 ? chipArr[index].length-- : chipArr[index].length = 0;
-              for (var i = chipRecordArr.length - 1; i >= 0; i--) {  //从后往前找到 当前区域中最后一个投注值
-                if (index == chipRecordArr[i].index) {
-                  chipRecordArr.splice(i, 1);   //当投注区域的index 匹配到 投注记录最新投注的index，则删除这条记录
-                  break;   //不需要在执行下去(每次撤销只删除一个)
-                }
-              }
 
-              if (chipRecordArr.length == 0) {
-                $('.ui-button').addClass('btn-disabled');
-              }
-              self.showMoney(bitTypeSelf, -chipMoney);
-            }
-          }
-          nowTime = new Date();
-        }
+      } else {
+        console.log('请点击有效投位置！');
       }
+    }
 
-    });
   }
+
+  componentDidMount() {
+    //取消右键菜单
+    // $('body').bind("contextmenu", function(e) {
+    //   return false;
+    // });
+    this.buttonClick();
+  }
+
   /**
    * [AddChipThere 创建筹码]
    * @param {[type]} bitTypeSelf [当前投注类型的this指针]
@@ -171,17 +193,6 @@ export default class GameLogic extends Component {
 
   }
 
-  onMouseOverChip() {
-    var $bitType = $('.dice-table .dice-sheet .bet-container');
-    $bitType.hover(function (event) {
-      /* Act on the event */
-      $(this).find('.tip').css('display', "inline-block");
-      $(this).find('.bet-type ').css('display', "inline-block");
-    }, function (event) {
-      $(this).find('.tip').css('display', "none");
-      $(this).find('.bet-type ').css('display', "none");
-    });
-  }
   /**
    * [showMoney 1.显示tip中金额。2.更新总金额。3.计算投注钱数]
    * @param  {[type]} bitTypeSelf [当前投注类型的this指针]
@@ -287,7 +298,7 @@ export default class GameLogic extends Component {
    * @return {[type]} [description]
    */
   repealChip() {
-    if (new Date() - nowTime > 300) {
+    if (new Date() - nowTime > 500) {
       if (chipRecordArr.length) {
         var lastChip = chipRecordArr.pop();
         lastChip.bitTypeSelf.find('i').eq(chipArr[lastChip.index].length - 1).remove(); //删除区块中最后一个筹码
@@ -365,21 +376,21 @@ export default class GameLogic extends Component {
       if (off) {
         setTimeout(function () {
           var winIndex = self.prizeWinning(resArr);
-          off = false;
           //中奖索引变亮
           var $betType = $('.dice-sheet');
           for (var i = 0; i < winIndex.length; i++) {
-            $betType.find('.dice-sheet-' + winIndex[i]).css('display', "inline-block");
+            $betType.find('.dice-sheet-' + winIndex[i]).css('visibility', "visible");
           }
 
           self.saveHistory(resArr, winIndex);
           setTimeout(function () {
             for (var i = 0; i < winIndex.length; i++) {
-              $betType.find('.dice-sheet-' + winIndex[i]).css('display', "none");
+              $betType.find('.dice-sheet-' + winIndex[i]).css('visibility', "hidden");
             }
-            //重置桌面计算奖金
+            //  重置桌面计算奖金
             self.settleAccount(winIndex);
-          }, 3000)
+            $diceSheet.css('pointer-events', 'auto');
+          }, 2000)
 
         }, 1000)
       };
@@ -548,21 +559,25 @@ export default class GameLogic extends Component {
       chipArr[i].length = 0;
     }
     var $diceSheet = $('.dice-sheet');
-    $diceSheet.css('pointer-events', 'auto');
   }
 
   render() {
-    var { dataCountAmount, dataUserBalance, history } = this.state;
+    var { dataCountAmount, dataUserBalance, history, activeChip } = this.state;
     return (
       <div className="container-main">
         <div className="dice-top">
-          <LayoutTop history={history} />
+          <DicePanel history={history} />
         </div>
         <div className="dice-table">
-          <LayoutMiddle />
+          <ChipTable onBet={val => this.bet(val)} />
         </div>
         <div className="layout-bottom">
-          <LayoutBottom dataCountAmount={dataCountAmount} dataUserBalance={dataUserBalance} />
+          <ChipGroup
+            onChangeChip={this.changeChip.bind(this)}
+            chipArr={this.ChipArr}
+            activeChip={activeChip}
+            dataCountAmount={dataCountAmount}
+            dataUserBalance={dataUserBalance} />
         </div>
       </div>
     )
